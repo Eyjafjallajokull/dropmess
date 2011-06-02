@@ -3,37 +3,48 @@ import os
 import time
 
 fileTypes = {
-  'Applications' : [ 'exe', 'bin', 'sh', 'deb' ],
-  
-  'Music' : [ 'mp3', 'mp2', 'wav', 'rm', 'flac' ],
-  
-  'Video' : [ 'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv' ],
-  
-  'Documents' : [
-    # ms
-    'doc', 'xls', 'ppt',
-    # oo
-    'odt', 'odp',
-    # other
-    'psd', 'xfc', 
-    'txt', 'pdf'
-  ],
-  
-  'Compressed' : [ 'tar', 'rar', 'zip', 'gz', '7z' ],
-  
-  'Images' : [ 'jpg', 'png', 'gif', 'jpeg', 'tiff', 'raw', 'nef', 'svg' ],
-  
-  'Sources' : [
-    'rb', 'py', 'c', 'java', 'php', 
-    'css', 'html', 'js'
-  ],
-  
-  'Unknown' : [],
-  'Dictionary' : []
+    'Applications' : [ 
+        'exe', 'bin', 'sh', 'deb'
+    ],
+    
+    'Music' : [ 
+        'mp3', 'mp2', 'wav', 'rm', 'flac',
+        'gp3', 'gp4', 'gp5'
+    ],
+    
+    'Video' : [
+        'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv'
+    ],
+    
+    'Documents' : [
+        # ms
+        'doc', 'xls', 'ppt',
+        # oo
+        'odt', 'odp',
+        # other
+        'psd', 'xfc', 
+        'txt', 'pdf'
+    ],
+    
+    'Compressed' : [
+        'tar', 'rar', 'zip', 'gz', '7z'
+    ],
+    
+    'Images' : [
+        'jpg', 'png', 'gif', 'jpeg', 'tiff', 'raw', 'nef', 'svg'
+    ],
+    
+    'Sources' : [
+        'rb', 'py', 'c', 'java', 'php', 
+        'css', 'html', 'js'
+    ],
+    
+    'Unknown' : [],
+    'Dictionaries' : []
 }
 
 dirs = []
-diffs = {}
+prevDiffs = {}
 
 configFile = './dropmess.ini'
 config = None
@@ -42,11 +53,25 @@ def detectType(name):
     if (os.path.isfile(name)):
         ext = os.path.splitext(name)[1][1:]
         for (name, exts) in fileTypes.items():
-            if ext in exts:
+            if ext.lower() in exts:
                 return name
         return 'Unknown';
     elif (os.path.isdir(name)):
-        return 'Dictionary';
+        collector = {}
+        for entry in os.listdir(name):
+            #print os.path.join(name,entry)
+            type = detectType(os.path.join(name,entry))
+            if type in collector.keys():
+                collector[type] += 1
+            else:
+                collector[type] = 1
+        max = 0
+        maxType = 'Unknown'
+        for type, count in collector.items():
+            if max < count:
+                max = count
+                maxType = type
+        return maxType
 
 def move(src, dst, attempt = 0):
     #print src,dst,attempt 
@@ -65,26 +90,36 @@ def move(src, dst, attempt = 0):
         if os.path.isfile(tmpdst):
             raise OSError
         os.rename(src, tmpdst)
+        
     except OSError:
         move(src, dst, attempt+1)
 
 def dropMess(name):
-    diff = diffs[name] = os.listdir(name)
-    for entry in diff:
+    newDiff = {}
+    for entry in os.listdir(name):
         if entry in fileTypes.keys():
-            continue
+            continue    
         path = os.path.join(name, entry)
+        newDiff[name] = os.stat(path).st_mtime
+        if newDiff[name] > time.time()-10:
+            continue
+        
         ftype = detectType(path)
         targetDir = os.path.join(name, ftype) + os.sep
         if not os.path.isdir(targetDir):
             os.mkdir(targetDir)
+        
         target = os.path.join(targetDir, entry)
         move(path, target, 0)
+        
+    prevDiffs[name] = newDiff
 
 if __name__ == '__main__':
     config = ConfigParser.ConfigParser()
     config.readfp(file(os.path.expandvars(configFile)))
     dirs = config.sections()
+    for i in range(len(dirs)):
+        dirs[i] = os.path.expandvars(dirs[i])
     
     print dirs
     
