@@ -4,7 +4,7 @@ import time
 
 fileTypes = {
     'Applications' : [ 
-        'exe', 'bin', 'sh', 'deb'
+        'exe', 'bin', 'deb'
     ],
     
     'Music' : [ 
@@ -35,12 +35,11 @@ fileTypes = {
     ],
     
     'Sources' : [
-        'rb', 'py', 'c', 'java', 'php', 
+        'rb', 'py', 'c', 'java', 'php', 'sh', 
         'css', 'html', 'js'
     ],
     
-    'Unknown' : [],
-    'Dictionaries' : []
+    'Unknown' : []
 }
 
 dirs = []
