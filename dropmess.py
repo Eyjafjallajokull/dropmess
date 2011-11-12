@@ -1,6 +1,7 @@
 import ConfigParser
 import os
 import time
+import glob
 
 fileTypes = {
     'Applications' : [ 
@@ -13,7 +14,7 @@ fileTypes = {
     ],
     
     'Video' : [
-        'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv'
+        'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv', 'm4v','wmv'
     ],
     
     'Documents' : [
@@ -22,12 +23,12 @@ fileTypes = {
         # oo
         'odt', 'odp',
         # other
-        'psd', 'xfc', 
+        'psd', 'xcf', 
         'txt', 'pdf'
     ],
     
     'Compressed' : [
-        'tar', 'rar', 'zip', 'gz', '7z'
+        'tar', 'rar', 'zip', 'gz', '7z', 'iso'
     ],
     
     'Images' : [
@@ -53,24 +54,24 @@ def detectType(name):
         ext = os.path.splitext(name)[1][1:]
         for (name, exts) in fileTypes.items():
             if ext.lower() in exts:
-                return name
-        return 'Unknown';
+                return (name,1)
+        return ('Unknown',1)
     elif (os.path.isdir(name)):
         collector = {}
         for entry in os.listdir(name):
             #print os.path.join(name,entry)
-            type = detectType(os.path.join(name,entry))
-            if type in collector.keys():
-                collector[type] += 1
+            (type,count) = detectType(os.path.join(name,entry))
+            if type in collector:
+                collector[type] += count
             else:
-                collector[type] = 1
+                collector[type] = count
         max = 0
         maxType = 'Unknown'
         for type, count in collector.items():
             if max < count:
                 max = count
                 maxType = type
-        return maxType
+        return (maxType,max)
 
 def move(src, dst, attempt = 0):
     #print src,dst,attempt 
@@ -103,7 +104,7 @@ def dropMess(name):
         if newDiff[name] > time.time()-10:
             continue
         
-        ftype = detectType(path)
+        ftype = detectType(path)[0]
         targetDir = os.path.join(name, ftype) + os.sep
         if not os.path.isdir(targetDir):
             os.mkdir(targetDir)
