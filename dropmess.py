@@ -5,7 +5,7 @@ import glob
 
 fileTypes = {
     'Applications' : [ 
-        'exe', 'bin', 'deb'
+        'exe', 'bin', 'deb', 'msi'
     ],
     
     'Music' : [ 
@@ -19,12 +19,12 @@ fileTypes = {
     
     'Documents' : [
         # ms
-        'doc', 'xls', 'ppt',
+        'doc', 'docx', 'xls', 'ppt',
         # oo
         'odt', 'odp',
         # other
         'psd', 'xcf', 
-        'txt', 'pdf'
+        'txt', 'rtf', 'csv', 'pdf'
     ],
     
     'Compressed' : [
@@ -32,7 +32,7 @@ fileTypes = {
     ],
     
     'Images' : [
-        'jpg', 'png', 'gif', 'jpeg', 'tiff', 'raw', 'nef', 'svg'
+        'jpg', 'png', 'gif', 'jpeg', 'tiff', 'raw', 'nef', 'svg', 'tga'
     ],
     
     'Sources' : [
@@ -46,7 +46,7 @@ fileTypes = {
 dirs = []
 prevDiffs = {}
 
-configFile = './dropmess.ini'
+configFile = './config.ini'
 config = None
 
 def detectType(name):
@@ -96,22 +96,25 @@ def move(src, dst, attempt = 0):
 
 def dropMess(name):
     newDiff = {}
-    for entry in os.listdir(name):
-        if entry in fileTypes.keys():
-            continue    
-        path = os.path.join(name, entry)
-        newDiff[name] = os.stat(path).st_mtime
-        if newDiff[name] > time.time()-10:
-            continue
-        
-        ftype = detectType(path)[0]
-        targetDir = os.path.join(name, ftype) + os.sep
-        if not os.path.isdir(targetDir):
-            os.mkdir(targetDir)
-        
-        target = os.path.join(targetDir, entry)
-        move(path, target, 0)
-        
+    try:
+		for entry in os.listdir(name):
+		    if entry in fileTypes.keys():
+		        continue    
+		    path = os.path.join(name, entry)
+		    newDiff[name] = os.stat(path).st_mtime
+		    if newDiff[name] > time.time()-10:
+		        continue
+		    
+		    ftype = detectType(path)[0]
+		    targetDir = os.path.join(name, ftype) + os.sep
+		    if not os.path.isdir(targetDir):
+		        os.mkdir(targetDir)
+		    
+		    target = os.path.join(targetDir, entry)
+		    move(path, target, 0)
+    except OSError as err:
+    	print err
+    	exit(1)
     prevDiffs[name] = newDiff
 
 if __name__ == '__main__':
