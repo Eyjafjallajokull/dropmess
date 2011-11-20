@@ -114,21 +114,21 @@ def dropMess(name):
     '''Tidy given directory.'''
     newDiff = {}
     try:
-		for entry in os.listdir(name):
-		    if entry in fileTypes.keys():
-		        continue    
-		    path = os.path.join(name, entry)
-		    newDiff[name] = os.stat(path).st_mtime
-		    if newDiff[name] > time.time()-10:
-		        continue
-		    
-		    ftype = detectType(path)
-		    targetDir = os.path.join(name, ftype) + os.sep
-		    if not os.path.isdir(targetDir):
-		        os.mkdir(targetDir)
-		    
-		    target = os.path.join(targetDir, entry)
-		    move(path, target, 0)
+        for entry in os.listdir(name):
+            if entry in fileTypes.keys():
+                continue    
+            path = os.path.join(name, entry)
+            newDiff[name] = os.stat(path).st_mtime
+            if newDiff[name] > time.time()-10:
+                continue
+
+            ftype = detectType(path)
+            targetDir = os.path.join(name, ftype) + os.sep
+            if not os.path.isdir(targetDir):
+                os.mkdir(targetDir)
+
+            target = os.path.join(targetDir, entry)
+            move(path, target, 0)
     except OSError as err:
     	print err
     	exit(1)
