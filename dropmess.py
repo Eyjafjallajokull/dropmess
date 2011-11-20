@@ -139,7 +139,10 @@ if __name__ == '__main__':
     print 'Started watching directories:'
     print dirs
     
-    while True:
-        for dir in dirs:
-            dropMess(dir)
-        time.sleep(1)
+    try:
+        while True:
+            for dir in dirs:
+                dropMess(dir)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
