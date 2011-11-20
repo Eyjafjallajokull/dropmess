@@ -24,6 +24,7 @@ into nicely:
 Setup
 -----
 
-1. Get code.
-2. Add directiories in `config.ini`
-3. Start with `python dropmess.py -n`
+1. Install [python-daemon](http://pypi.python.org/pypi/python-daemon)
+2. Get code
+3. Add directiories in `config.ini`
+4. Start with `python dropmess.py -n`
