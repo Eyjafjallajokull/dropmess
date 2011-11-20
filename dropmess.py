@@ -3,6 +3,7 @@ import os
 import time
 import glob
 
+'''The list of known file extensions grouped by type'''
 fileTypes = {
     'Applications' : [ 
         'exe', 'bin', 'deb', 'msi'
@@ -43,20 +44,27 @@ fileTypes = {
     'Unknown' : []
 }
 
-dirs = []
-prevDiffs = {}
-
 configFile = './config.ini'
 config = None
 
+dirs = []
+prevDiffs = {}
+
 def detectType(name):
+    '''Return touple: (type of specified file or directory, number of matches).
+    
+    If name is a path to directory script will go recursively 
+    tough all files and return most matched file type.'''
+    
     if (os.path.isfile(name)):
         ext = os.path.splitext(name)[1][1:]
         for (name, exts) in fileTypes.items():
             if ext.lower() in exts:
                 return (name,1)
         return ('Unknown',1)
+    
     elif (os.path.isdir(name)):
+        '''Go Go Recursion'''
         collector = {}
         for entry in os.listdir(name):
             #print os.path.join(name,entry)
@@ -74,6 +82,9 @@ def detectType(name):
         return (maxType,max)
 
 def move(src, dst, attempt = 0):
+    '''Move src to dst.
+    
+    If dst already exists, script will add incrementally number to dst'''
     #print src,dst,attempt 
     tmpdst = dst
     if attempt > 0:
@@ -95,6 +106,7 @@ def move(src, dst, attempt = 0):
         move(src, dst, attempt+1)
 
 def dropMess(name):
+    '''Tidy given directory.'''
     newDiff = {}
     try:
 		for entry in os.listdir(name):
@@ -123,7 +135,8 @@ if __name__ == '__main__':
     dirs = config.sections()
     for i in range(len(dirs)):
         dirs[i] = os.path.expandvars(dirs[i])
-    
+        
+    print 'Started watching directories:'
     print dirs
     
     while True:
