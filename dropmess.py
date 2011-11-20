@@ -1,7 +1,9 @@
 import ConfigParser
+import argparse
 import os
 import time
 import glob
+from daemon import DaemonContext
 
 '''The list of known file extensions grouped by type'''
 fileTypes = {
@@ -53,7 +55,7 @@ prevDiffs = {}
 def detectType(name):
     '''Return touple: (type of specified file or directory, number of matches).
     
-    If name is a path to directory script will go recursively 
+    If `name` is a path to directory script will go recursively 
     tough all files and return most matched file type.'''
     
     if (os.path.isfile(name)):
@@ -82,9 +84,9 @@ def detectType(name):
         return (maxType,max)
 
 def move(src, dst, attempt = 0):
-    '''Move src to dst.
+    '''Move `src` to `dst`.
     
-    If dst already exists, script will add incrementally number to dst'''
+    If `dst` already exists, script will add incrementally number to `dst`'''
     #print src,dst,attempt 
     tmpdst = dst
     if attempt > 0:
@@ -128,17 +130,8 @@ def dropMess(name):
     	print err
     	exit(1)
     prevDiffs[name] = newDiff
-
-if __name__ == '__main__':
-    config = ConfigParser.ConfigParser()
-    config.readfp(file(os.path.expandvars(configFile)))
-    dirs = config.sections()
-    for i in range(len(dirs)):
-        dirs[i] = os.path.expandvars(dirs[i])
-        
-    print 'Started watching directories:'
-    print dirs
     
+def main():
     try:
         while True:
             for dir in dirs:
@@ -146,3 +139,24 @@ if __name__ == '__main__':
             time.sleep(1)
     except KeyboardInterrupt:
         pass
+
+if __name__ == '__main__':
+    config = ConfigParser.ConfigParser()
+    config.readfp(file(os.path.expandvars(configFile)))
+    dirs = config.sections()
+    for i in range(len(dirs)):
+        dirs[i] = os.path.expandvars(dirs[i])
+    
+    parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('-n', action='store_true', help='Ninja mode (run in background)', dest='daemon')
+    args = parser.parse_args()
+    
+    
+    if args.daemon == True:
+        print 'Ninja mode activated.'
+        with DaemonContext():
+            main()
+    else:
+        print 'Started watching directories:'
+        print dirs
+        main()
