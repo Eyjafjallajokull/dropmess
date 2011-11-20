@@ -53,11 +53,14 @@ dirs = []
 prevDiffs = {}
 
 def detectType(name):
+    '''Return type of `name` node'''
+    return _detectType(name)[0]
+    
+def _detectType(name):
     '''Return touple: (type of specified file or directory, number of matches).
     
     If `name` is a path to directory script will go recursively 
     tough all files and return most matched file type.'''
-    
     if (os.path.isfile(name)):
         ext = os.path.splitext(name)[1][1:]
         for (name, exts) in fileTypes.items():
@@ -70,7 +73,7 @@ def detectType(name):
         collector = {}
         for entry in os.listdir(name):
             #print os.path.join(name,entry)
-            (type,count) = detectType(os.path.join(name,entry))
+            (type,count) = _detectType(os.path.join(name,entry))
             if type in collector:
                 collector[type] += count
             else:
@@ -119,7 +122,7 @@ def dropMess(name):
 		    if newDiff[name] > time.time()-10:
 		        continue
 		    
-		    ftype = detectType(path)[0]
+		    ftype = detectType(path)
 		    targetDir = os.path.join(name, ftype) + os.sep
 		    if not os.path.isdir(targetDir):
 		        os.mkdir(targetDir)
