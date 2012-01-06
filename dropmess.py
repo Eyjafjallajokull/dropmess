@@ -3,7 +3,6 @@ import argparse
 import os
 import time
 import glob
-from daemon import DaemonContext
 
 '''The list of known file extensions grouped by type'''
 fileTypes = {
@@ -88,9 +87,10 @@ def _detectType(name):
 
 def move(src, dst, attempt = 0):
     '''Move `src` to `dst`.
-    
     If `dst` already exists, script will add incrementally number to `dst`'''
-    #print src,dst,attempt 
+    if args.debug:
+        print src, ' = > ',dst 
+    
     tmpdst = dst
     if attempt > 0:
         p1 = dst.rfind('.')
@@ -108,6 +108,7 @@ def move(src, dst, attempt = 0):
         os.rename(src, tmpdst)
         
     except OSError:
+        # TODO: what if dst is not writable? infinite loop?
         move(src, dst, attempt+1)
 
 def dropMess(name):
@@ -152,10 +153,12 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-n', action='store_true', help='Ninja mode (run in background)', dest='daemon')
+    parser.add_argument('-d', action='store_true', help='Log actions', dest='debug')
     args = parser.parse_args()
     
     
     if args.daemon == True:
+        from daemon import DaemonContext
         print 'Ninja mode activated.'
         with DaemonContext():
             main()
