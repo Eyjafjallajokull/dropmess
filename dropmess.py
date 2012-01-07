@@ -141,12 +141,16 @@ def dropMess(name):
     
 def main():
     try:
-        while True:
-            if args.debug:
-                print 
+        if args.once:
             for watchDir in watchDirs:
                 dropMess(watchDir)
-            time.sleep(1)
+        else:
+            while True:
+                if args.debug:
+                    print 
+                for watchDir in watchDirs:
+                    dropMess(watchDir)
+                time.sleep(1)
                     
     except KeyboardInterrupt:
         pass
@@ -159,17 +163,15 @@ if __name__ == '__main__':
         watchDirs[i] = os.path.expandvars(watchDirs[i])
     
     parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-n', action='store_true', help='Ninja mode (run in background)', dest='daemon')
-    parser.add_argument('-d', action='store_true', help='Log actions', dest='debug')
+    parser.add_argument('-n', action='store_true', help='Ninja mode - run in background', dest='daemon')
+    parser.add_argument('-d', action='store_true', help='Debug mode - print more messages', dest='debug')
+    parser.add_argument('-1', action='store_true', help='Single run - run algorithm only once and exit ', dest='once')
     args = parser.parse_args()
-    
     
     if args.daemon == True:
         from daemon import DaemonContext
-        print 'Ninja mode activated.'
         with DaemonContext():
             main()
     else:
-        print 'Started watching directories:'
         print watchDirs
         main()
