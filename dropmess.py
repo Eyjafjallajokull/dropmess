@@ -9,6 +9,9 @@ config = None
 watchDirs = []
 prevDiffs = {}
 
+ifPossibleDigArchives = True
+delay = 1
+
 class Detector:
     '''The list of known file extensions grouped by type'''
     types = {
@@ -22,7 +25,7 @@ class Detector:
         ],
         
         'Video' : [
-            'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv', 'm4v', 'wmv'
+            'avi', 'mpg', 'mov', 'mp4', 'ogv', 'flv', 'm4v', 'wmv', 'mkv'
         ],
         
         'Documents' : [
@@ -32,7 +35,7 @@ class Detector:
             'odt', 'odp',
             # other
             'psd', 'xcf',
-            'txt', 'rtf', 'csv', 'pdf'
+            'txt', 'rtf', 'csv', 'pdf', 'tex'
         ],
         
         'Compressed' : [
@@ -44,19 +47,41 @@ class Detector:
         ],
         
         'Sources' : [
-            'rb', 'py', 'c', 'java', 'php', 'sh',
+            'rb', 'py', 'c', 'h', 'java', 'php', 'sh',
             'css', 'html', 'js'
         ],
         
         'Unknown' : []
     }
     
-    def run(self, name):
-        '''Return type of `name` node'''
-        return self._run(name)[0]
+    def _getBest(self, typesWithScores):
+        ''' Return most recurrent type from dictionary variable with structure:
+            {'Video':1, 'Audio':3}'''
+        maxScore = 0
+        maxType = 'Unknown'
+        for fileType, score in typesWithScores.items():
+            if maxScore < score:
+                maxScore = score
+                maxType = fileType
+        return (maxType, maxScore)
     
-    def _run(self, name):
-        '''Return tuple: (type of specified file or directory, number of matches).'''
+    def _extensionToType(self, ext):
+        ''' Return type associated with given extension '''
+        for (name, exts) in self.types.items():
+            if ext in exts:
+                return (name, 1)
+        return ('Unknown', 1)
+    
+    def _fileExtension(self, path):
+        ''' Extract extension from path '''
+        return os.path.splitext(path)[1][1:].lower()
+        
+    
+    def filesystem(self, name):
+        ''' Return type of file or directory `name` '''
+        return self._filesystem(name)[0]
+    
+    def _filesystem(self, name):
         if (os.path.isfile(name)):
             return self._file(name)
         
@@ -64,29 +89,69 @@ class Detector:
             return self._directory(name)
             
     def _file(self, name):
-        ext = os.path.splitext(name)[1][1:].lower()
-        for (name, exts) in self.types.items():
-            if ext in exts:
-                return (name, 1)
-        return ('Unknown', 1)
+        ''' Return type of file '''
+        ext = self._fileExtension(name)
+        
+        try:
+            custom_handler = getattr(self, '_handle_'+ext)
+            return custom_handler(name)
+        except AttributeError:
+            return self._extensionToType(ext)
+    
+    def _handle_rar(self, name):
+        ''' Special handler for rar files '''
+        try:
+            rarfile
+            archive = rarfile.RarFile(name)
+            filesInArchive = [ f.filename for f in archive.infolist() ]
+            archiveType = Detector().paths(filesInArchive)
+            if archiveType == 'Unknown': 
+                return ('Compressed', 1)
+            else: 
+                return (archiveType, 1)
+        except NameError:
+            return ('Compressed', 1)
+        
+    def _handle_zip(self, name):
+        ''' Special handler for zip files '''
+        try:
+            zipfile
+            archive = zipfile.ZipFile(name)
+            filesInArchive = [ f.filename for f in archive.infolist() ]
+            archiveType = Detector().paths(filesInArchive)
+            if archiveType == 'Unknown': 
+                return ('Compressed', 1)
+            else: 
+                return (archiveType, 1)
+        except NameError:
+            return ('Compressed', 1)
     
     def _directory(self, name):
         '''go recursively tough all files and return most recurrent file type.'''
         collector = {}
         for entry in os.listdir(name):
             #print os.path.join(name,entry)
-            (fileType, score) = self._run(os.path.join(name, entry))
+            (fileType, score) = self._filesystem(os.path.join(name, entry))
             if fileType in collector:
                 collector[fileType] += score
             else:
                 collector[fileType] = score
-        maxScore = 0
-        maxType = 'Unknown'
-        for fileType, score in collector.items():
-            if maxScore < score:
-                maxScore = score
-                maxType = fileType
-        return (maxType, maxScore)
+        return self._getBest(collector)
+    
+        
+    def paths(self, names):
+        ''' Return most recurrent type based on array of paths '''
+        collector = {}
+        for name in names:
+            ext = self._fileExtension(name)
+            if ext == '': continue # ignore extensionless files
+            fileType = self._extensionToType(ext)[0]
+            if fileType in collector:
+                collector[fileType] += 1
+            else:
+                collector[fileType] = 1
+        return self._getBest(collector)[0]
+            
         
 
 def move(src, dst, attempt=0):
@@ -94,6 +159,8 @@ def move(src, dst, attempt=0):
     If `dst` already exists, script will add incrementally number to `dst`'''
     if args.debug:
         print src, ' = > ', dst 
+    if args.simulate:
+        return
     
     tmpdst = dst
     if attempt > 0:
@@ -124,10 +191,10 @@ def dropMess(name):
                 continue    
             path = os.path.join(name, entry)
             newDiff[name] = os.stat(path).st_mtime
-            if newDiff[name] > time.time() - 10:
+            if newDiff[name] > time.time() - delay - 10:
                 continue
 
-            ftype = Detector().run(path)
+            ftype = Detector().filesystem(path)
             targetDir = os.path.join(name, ftype) + os.sep
             if not os.path.isdir(targetDir):
                 os.mkdir(targetDir)
@@ -146,7 +213,7 @@ def main():
                 print 
             for watchDir in watchDirs:
                 dropMess(watchDir)
-            time.sleep(1)
+            time.sleep(delay)
                     
     except KeyboardInterrupt:
         pass
@@ -161,8 +228,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-n', action='store_true', help='Ninja mode (run in background)', dest='daemon')
     parser.add_argument('-d', action='store_true', help='Log actions', dest='debug')
+    parser.add_argument('-s', action='store_true', help='Simulate - dont move anything', dest='simulate')
     args = parser.parse_args()
     
+    if ifPossibleDigArchives:
+        try: import rarfile
+        except ImportError: 
+            if args.debug: print 'rarfile module not installed'
+        
+        try: import zipfile
+        except ImportError: 
+            if args.debug: print 'zipfile module not installed'
     
     if args.daemon == True:
         from daemon import DaemonContext
