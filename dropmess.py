@@ -10,7 +10,7 @@ watchDirs = []
 prevDiffs = {}
 
 ifPossibleDigArchives = True
-delay = 1
+delay = 10
 
 class Detector:
     '''The list of known file extensions grouped by type'''
@@ -208,12 +208,17 @@ def dropMess(name):
     
 def main():
     try:
-        while True:
-            if args.debug:
-                print 
+        if args.once:
             for watchDir in watchDirs:
                 dropMess(watchDir)
             time.sleep(delay)
+        else:
+            while True:
+                if args.debug:
+                    print 
+                for watchDir in watchDirs:
+                    dropMess(watchDir)
+                time.sleep(delay)
                     
     except KeyboardInterrupt:
         pass
@@ -226,9 +231,10 @@ if __name__ == '__main__':
         watchDirs[i] = os.path.expandvars(watchDirs[i])
     
     parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-n', action='store_true', help='Ninja mode (run in background)', dest='daemon')
-    parser.add_argument('-d', action='store_true', help='Log actions', dest='debug')
-    parser.add_argument('-s', action='store_true', help='Simulate - dont move anything', dest='simulate')
+    parser.add_argument('-n', action='store_true', help='Ninja mode - run in background', dest='daemon')
+    parser.add_argument('-d', action='store_true', help='Debug mode - print more messages', dest='debug')
+    parser.add_argument('-1', action='store_true', help='Single run - run algorithm only once and exit ', dest='once')
+    parser.add_argument('-s', action='store_true', help='Simulate - don\'t move anything', dest='simulate')
     args = parser.parse_args()
     
     if ifPossibleDigArchives:
@@ -242,10 +248,8 @@ if __name__ == '__main__':
     
     if args.daemon == True:
         from daemon import DaemonContext
-        print 'Ninja mode activated.'
         with DaemonContext():
             main()
     else:
-        print 'Started watching directories:'
         print watchDirs
         main()
