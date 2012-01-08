@@ -20,13 +20,19 @@ into nicely:
     ├── Images
     ├── Music
     └── Sources
+
+Features
+--------
+
+- categorize files (and folders) into subdirectories
+- look into compressed ZIP, RAR, TAR files and determine their contents type
     
 Setup
 -----
 
-1. Install [python-daemon](http://pypi.python.org/pypi/python-daemon)
-2. Get code `git://github.com/Eyjafjallajokull/dropmess.git`
-3. Add directiories in `config.ini`
-4. Start with `python dropmess.py`
-5. (Optional) Learn more about command line arguments with `python dropmess.py -h`
-6. (Optional) Install python module [rarfile](http://pypi.python.org/pypi/rarfile/2.2) to detect type of archive contents
+1. Get code `git://github.com/Eyjafjallajokull/dropmess.git`
+2. Customize `config.ini`
+3. Start with `python dropmess.py`
+4. Learn more about command line arguments with `python dropmess.py -h`
+5. (Optional) To run script as daemon install [python-daemon](http://pypi.python.org/pypi/python-daemon)
+6. (Optional) Install python module [rarfile](http://pypi.python.org/pypi/rarfile/2.2) to detect type of RAR archive contents
