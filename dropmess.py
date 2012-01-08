@@ -2,6 +2,7 @@ import ConfigParser
 import argparse
 import os
 import time
+from subprocess import Popen, PIPE
 
 configFile = './config.ini'
 config = None
@@ -10,6 +11,8 @@ watchDirs = []
 _prevDiffs = {}
 digArchives = None
 delay = None
+
+class OpenedNode(Exception): pass
 
 class Detector:
     '''The list of known file extensions grouped by type '''
@@ -78,7 +81,13 @@ class Detector:
     
     def filesystem(self, name):
         ''' Return type of file or directory `name` '''
-        return self._filesystem(name)[0]
+        # run check for opened file descriptors
+        result = Popen('lsof +D "%s" | wc -l' % name,
+                       shell=True, stdout=PIPE, stderr=PIPE).communicate()[0]
+        if result.strip() == '0': 
+            return self._filesystem(name)[0]
+        else:
+            raise OpenedNode()
     
     def _filesystem(self, name):
         ''' Private filesystem method for recursion '''
@@ -93,7 +102,7 @@ class Detector:
         ext = self._fileExtension(name)
         
         try:
-            return getattr(self, '_handle_'+ext)(name)
+            return getattr(self, '_handle_' + ext)(name)
         except AttributeError:
             return self._extensionToType(ext)
     
@@ -162,14 +171,17 @@ class Detector:
                 collector[fileType] = 1
         return self._getBest(collector)[0]
             
-        
-
+    
 def move(src, dst, attempt=0):
     '''Move `src` to `dst`.
     If `dst` already exists, script will add incrementally number to `dst`'''
     if args.debug:
         print src, ' -=> ', dst 
     if args.simulate:
+        return
+    
+    if attempt > 1000 and args.debug:
+        print 'i tried 1000 times to move %s and failed' % src
         return
     
     tmpdst = dst
@@ -199,13 +211,19 @@ def dropMess(name):
     try:
         for entry in os.listdir(name):
             if entry in Detector.types.keys():
-                continue    
+                continue
             path = os.path.join(name, entry)
             newDiff[name] = os.stat(path).st_mtime
             if newDiff[name] > time.time() - delay - 10:
                 continue
-
-            ftype = Detector().filesystem(path)
+            
+            try:
+                ftype = Detector().filesystem(path)
+            except OpenedNode:
+                if args.debug:
+                    print 'opened file(s) %s' % path
+                continue
+            
             targetDir = os.path.join(name, ftype) + os.sep
             if not os.path.isdir(targetDir):
                 os.mkdir(targetDir)
@@ -240,7 +258,7 @@ if __name__ == '__main__':
                                         'digArchives':True})
     config.readfp(file(os.path.expandvars(configFile)))
     delay = int(config.get('global', 'delay'))
-    digArchives = int(config.get('global', 'digArchives'))==1
+    digArchives = int(config.get('global', 'digArchives')) == 1
     
     # read directories to watch
     watchDirs = config.sections()
@@ -249,7 +267,7 @@ if __name__ == '__main__':
         watchDirs[i] = os.path.expandvars(watchDirs[i])
     
     # parse command line arguments
-    parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.', 
+    parser = argparse.ArgumentParser(description='Automated filesystem selforganisation.',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-n', action='store_true', help='Ninja mode - run in background', dest='daemon')
     parser.add_argument('-d', action='store_true', help='Debug mode - print more messages', dest='debug')
@@ -261,7 +279,7 @@ if __name__ == '__main__':
         for module in ['rarfile', 'zipfile', 'tarfile']:
             try: vars()[module] = __import__(module)
             except ImportError: 
-                if args.debug: print module+' module not installed'
+                if args.debug: print module + ' module not installed'
         
     if args.daemon:
         try: from daemon import DaemonContext
