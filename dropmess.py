@@ -3,6 +3,7 @@ import argparse
 import os
 import time
 from subprocess import Popen, PIPE
+from inspect import ismodule
 
 configFile = './config.ini'
 config = None
@@ -11,10 +12,18 @@ watchDirs = []
 _prevDiffs = {}
 digArchives = None
 delay = None
+rarfile = zipfile = tarfile = None
 
 class OpenedNode(Exception): pass
 
 class Detector:
+    ''' Detect category of given filesystem node or list of paths
+    Examples:
+    Detector().filesystem('/home/user/file.txt')
+    Detector().filesystem('/home/user/Directory')
+    Detector().paths(['/home/user/abc.txt', '/home/user/def.mp3'])
+    '''
+    
     '''The list of known file extensions grouped by type '''
     types = {
         'Applications' : [ 
@@ -73,10 +82,6 @@ class Detector:
             if ext in exts:
                 return (name, 1)
         return ('Unknown', 1)
-    
-    def _fileExtension(self, path):
-        ''' Extract extension from path '''
-        return os.path.splitext(path)[1][1:].lower()
         
     
     def filesystem(self, name):
@@ -99,50 +104,12 @@ class Detector:
             
     def _file(self, name):
         ''' Return type of file '''
-        ext = self._fileExtension(name)
-        
-        try:
-            return getattr(self, '_handle_' + ext)(name)
-        except AttributeError:
+        ext = fileExtension(name)
+        preHook = HooksPre().getAccurateType(name)
+        if preHook[0]!='Unknown':
+            return preHook
+        else:
             return self._extensionToType(ext)
-    
-    def _handle_rar(self, name):
-        ''' Special handler for rar files '''
-        try: rarfile
-        except NameError: return ('Compressed', 1)
-        
-        archive = rarfile.RarFile(name)
-        filesInArchive = [ f.filename for f in archive.infolist() ]
-        return self._commonCompressedFile(filesInArchive)
-        
-    def _handle_zip(self, name):
-        ''' Special handler for zip files '''
-        try: zipfile
-        except NameError: return ('Compressed', 1)
-        
-        archive = zipfile.ZipFile(name)
-        filesInArchive = [ f.filename for f in archive.infolist() ]
-        return self._commonCompressedFile(filesInArchive)
-        
-    def _handle_gz(self, name):
-        ''' Special handler for tar, tar.gz and tar.bz2 files '''
-        try: tarfile
-        except NameError: return ('Compressed', 1)
-        
-        if not (name.endswith('tar') or name.endswith('tar.gz') or name.endswith('tar.bz2')):
-            return ('Compressed', 1)
-        
-        archive = tarfile.open(name, 'r:*')
-        filesInArchive = archive.getnames()
-        return self._commonCompressedFile(filesInArchive)
-        
-    def _commonCompressedFile(self, filesInArchive):
-        ''' Detect type of files from archive '''
-        archiveType = Detector().paths(filesInArchive)
-        if archiveType == 'Unknown': 
-            return ('Compressed', 1)
-        else: 
-            return (archiveType, 1)
         
     
     def _directory(self, name):
@@ -162,7 +129,7 @@ class Detector:
         ''' Return most recurrent type based on array of paths '''
         collector = {}
         for name in names:
-            ext = self._fileExtension(name)
+            ext = fileExtension(name)
             if ext == '': continue # ignore extensionless files
             fileType = self._extensionToType(ext)[0]
             if fileType in collector:
@@ -170,8 +137,81 @@ class Detector:
             else:
                 collector[fileType] = 1
         return self._getBest(collector)[0]
-            
+
+
+class HooksPre():
+    ''' More accurate type detector methods. '''
     
+    def getAccurateType(self, name):
+        self.name = name
+        self.ext = fileExtension(name)
+        try:
+            return getattr(self, '_handle_%s' % self.ext)(self.name)
+        except AttributeError:
+            return ('Unknown', 1)
+    
+    def _commonCompressedFile(self, filesInArchive):
+        ''' Detect type of files from archive '''
+        archiveType = Detector().paths(filesInArchive)
+        if archiveType == 'Unknown': 
+            return ('Compressed', 1)
+        else: 
+            return (archiveType, 1)
+        
+    def _handle_rar(self, name):
+        ''' Special handler for rar files '''
+        if not ismodule(rarfile): return ('Compressed', 1)
+        
+        archive = rarfile.RarFile(name)
+        filesInArchive = [ f.filename for f in archive.infolist() ]
+        return self._commonCompressedFile(filesInArchive)
+        
+    def _handle_zip(self, name):
+        ''' Special handler for zip files '''
+        if not ismodule(zipfile): return ('Compressed', 1)
+        
+        archive = zipfile.ZipFile(name)
+        filesInArchive = [ f.filename for f in archive.infolist() ]
+        return self._commonCompressedFile(filesInArchive)
+        
+    def _handle_tar(self, name):
+        ''' Special handler for gz files '''
+        if not ismodule(tarfile): return ('Compressed', 1)
+        
+        if not (name.endswith('tar') or name.endswith('tar.gz') or name.endswith('tar.bz2')):
+            return ('Compressed', 1)
+        
+        archive = tarfile.open(name, 'r:*')
+        filesInArchive = archive.getnames()
+        return self._commonCompressedFile(filesInArchive)
+        
+    def _handle_bz2(self, name):
+        ''' Special handler for tar.bz2 files '''
+        return self._handle_tar(name)
+        
+    def _handle_gz(self, name):
+        ''' Special handler for gz files '''
+        return self._handle_tar(name)
+    
+
+class HooksPost():
+    ''' Execute actions on moved items '''
+    def __init__(self, name):
+        self.name = name
+        self.ext = fileExtension(name)
+        try:
+            getattr(self, '_ext_%s' % self.ext)()
+        except AttributeError:
+            pass
+        
+    def _ext_rar(self):
+        print '_ext_rar',self.name
+
+    
+def fileExtension(path):
+    ''' Extract extension from path '''
+    return os.path.splitext(path)[1][1:].lower()
+
 def move(src, dst, attempt=0):
     '''Move `src` to `dst`.
     If `dst` already exists, script will add incrementally number to `dst`'''
@@ -230,6 +270,7 @@ def dropMess(name):
 
             target = os.path.join(targetDir, entry)
             move(path, target, 0)
+            HooksPost(target)
     except OSError as err:
         print err
         exit(1)
@@ -275,6 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', action='store_true', help='Simulate - don\'t move anything', dest='simulate')
     args = parser.parse_args()
     
+    # initialize compression modules
     if digArchives:
         for module in ['rarfile', 'zipfile', 'tarfile']:
             try: vars()[module] = __import__(module)
