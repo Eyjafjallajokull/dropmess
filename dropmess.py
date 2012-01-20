@@ -247,11 +247,11 @@ class HooksPre():
         
     def _handle_bz2(self):
         ''' Special handler for tar.bz2 files '''
-        return self._handle_tar(self.node.path)
+        return self._handle_tar()
         
     def _handle_gz(self):
         ''' Special handler for gz files '''
-        return self._handle_tar(self.node.path)
+        return self._handle_tar()
     
 
 class HooksPost():
