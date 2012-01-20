@@ -6,13 +6,13 @@ from subprocess import Popen
 
 import sys
 sys.path.insert(0, os.path.abspath('..'))
-from dropmess import Detector
+from dropmess import Detector, Node
 
 
 TESTGROUND = 'testground'
 
 allExts = []
-for (_, exts) in Detector.types.items():
+for (_, exts) in Detector.categories.items():
     for ext in exts:
         allExts.append(ext)
 
@@ -32,7 +32,7 @@ def getRandomExt():
 class TestDetector(unittest.TestCase):
 
     def setUp(self):
-        for (_, exts) in Detector.types.items():
+        for (_, exts) in Detector.categories.items():
             for ext in exts:
                 open( TESTGROUND + os.sep + getRandomName(None, ext), 'w').close()
         
@@ -40,17 +40,25 @@ class TestDetector(unittest.TestCase):
         Popen('rm -rf '+ TESTGROUND + os.sep + '*', shell=True).wait()
         
     def test_extensionToType(self):
-        self.assertEqual(Detector()._extensionToType('txt')[0], 'Documents')
-        self.assertEqual(Detector()._extensionToType('mp3')[0], 'Music')
-        self.assertEqual(Detector()._extensionToType('dsadsa')[0], 'Unknown')
-        self.assertEqual(Detector()._extensionToType('')[0], 'Unknown')
+        params = (
+                  ('txt', 'Documents'),
+                  ('mp3', 'Music'),
+                  ('dsadsa', 'Unknown'),
+                  ('', 'Unknown')
+                  )
+        for (extension, expectedCategory) in params:
+            self.assertEqual(Detector()._extensionToCategory(extension)[0], expectedCategory)
         
     def test_file(self):
-        self.assertEqual(Detector()._file('a.txt')[0], 'Documents')
-        self.assertEqual(Detector()._file('a.mp3')[0], 'Music')
-        self.assertEqual(Detector()._file('a.dsadsa')[0], 'Unknown')
-        self.assertEqual(Detector()._file('a')[0], 'Unknown')
-        self.assertEqual(Detector()._file('')[0], 'Unknown')
+        params = (
+                  ('a.txt', 'Documents'),
+                  ('a.mp3', 'Music'),
+                  ('a.dsadsa', 'Unknown'),
+                  ('a', 'Unknown'),
+                  ('', 'Unknown')
+                  )
+        for (filePath, expectedCategory) in params:
+            self.assertEqual(Detector()._file(Node(filePath))[0], expectedCategory)
         
     def test_paths(self):
         def paths(names, expected):
@@ -58,13 +66,12 @@ class TestDetector(unittest.TestCase):
             self.assertEqual(category, expected, 'Paths malfunction: %s != %s' % (category, expected) )
             
         paths([], 'Unknown')
-        paths([''], 'Unknown')
-        paths(['',''], 'Unknown')
-        paths(['a.txt'], 'Documents')
-        self.assertIsNotNone( Detector().paths([getRandomName() for _ in range(0,10000)]) )
+        paths([Node('')], 'Unknown')
+        paths([Node('a.txt')], 'Documents')
+        self.assertIsNotNone( Detector().paths([Node(getRandomName()) for _ in range(0,10000)]) )
         
     def test_filesystem(self):
-        self.assertIsNotNone(Detector().filesystem(TESTGROUND))
+        self.assertIsNotNone(Detector().filesystem(Node(TESTGROUND)))
         
     def test_compressed(self):
         #TODO:

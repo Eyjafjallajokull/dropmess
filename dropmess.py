@@ -16,6 +16,61 @@ rarfile = zipfile = tarfile = None
 
 class OpenedNode(Exception): pass
 
+class Node:
+    path = ''
+    extension = ''
+    isFilesystem = True
+    category = None
+    
+    def __init__(self, path, isFilesystem = True):
+        self.path = path
+        self.extension = os.path.splitext(self.path)[1][1:].lower()
+        self.isFilesystem = isFilesystem
+    
+    def getCategory(self):
+        if not self.category:
+            self.category = Detector().getCategory(self)
+        return self.category
+
+    def move(self, targetPath, attempt=0):
+        '''Move `src` to `targetPath`.
+        If `targetPath` already exists, script will add incrementally number to `targetPath`'''
+        
+        
+        if args.debug:
+            print self.path, ' -=> ', targetPath 
+        if args.simulate:
+            return
+        
+        if attempt > 1000 and args.debug:
+            print 'i tried 1000 times to move %s and failed' % self.path
+            return
+        
+        tmpdst = targetPath
+        if attempt > 0:
+            p1 = targetPath.rfind('.')
+            p2 = targetPath.rfind('/')
+            if p1 == -1 or p1 < p2:
+                tmpdst += ' ' + str(attempt)
+            else:
+                (a, b, c) = targetPath.rpartition('.')
+                b = ' ' + str(attempt) + '.'
+                tmpdst = a + b + c
+        
+        # TODO: this is unreadable
+        try:
+            if os.path.isfile(tmpdst):
+                raise OSError
+            os.rename(self.path, tmpdst)
+            self.path = targetPath
+            
+        except OSError:
+            # TODO: what if targetPath is not writable? infinite loop?
+            self.move(self.path, targetPath, attempt + 1)
+            self.path = targetPath
+        
+
+
 class Detector:
     ''' Detect category of given filesystem node or list of paths
     Examples:
@@ -24,8 +79,8 @@ class Detector:
     Detector().paths(['/home/user/abc.txt', '/home/user/def.mp3'])
     '''
     
-    '''The list of known file extensions grouped by type '''
-    types = {
+    '''The list of known file extensions grouped by category '''
+    categories = {
         'Applications' : [ 
             'exe', 'bin', 'deb', 'msi'
         ],
@@ -65,216 +120,186 @@ class Detector:
         'Unknown' : []
     }
     
-    def _getBest(self, typesWithScores):
-        ''' Return most recurrent type from dictionary variable with structure:
+    def getCategory(self, node):
+        if node.isFilesystem:
+            return self.filesystem(node)
+        else:
+            return self._extensionToCategory(node)
+    
+    def _getBest(self, categoriesWithScores):
+        ''' Return most recurrent category from dictionary variable with structure:
             {'Video':1, 'Audio':3}'''
         maxScore = 0
-        maxType = 'Unknown'
-        for fileType, score in typesWithScores.items():
+        maxCategory = 'Unknown'
+        for fileCategory, score in categoriesWithScores.items():
             if maxScore < score:
                 maxScore = score
-                maxType = fileType
-        return (maxType, maxScore)
+                maxCategory = fileCategory
+        return (maxCategory, maxScore)
     
-    def _extensionToType(self, ext):
-        ''' Return type associated with given extension '''
-        for (name, exts) in self.types.items():
+    def _extensionToCategory(self, ext):
+        ''' Return category associated with given extension '''
+        for (category, exts) in self.categories.items():
             if ext in exts:
-                return (name, 1)
+                return (category, 1)
         return ('Unknown', 1)
         
     
-    def filesystem(self, name):
-        ''' Return type of file or directory `name` '''
+    def filesystem(self, node):
+        ''' Return category of given node '''
         # run check for opened file descriptors
-        result = Popen('lsof +D "%s" | wc -l' % name,
+        result = Popen('lsof +D "%s" | wc -l' % node.path,
                        shell=True, stdout=PIPE, stderr=PIPE).communicate()[0]
         if result.strip() == '0': 
-            return self._filesystem(name)[0]
+            return self._filesystem(node)[0]
         else:
             raise OpenedNode()
     
-    def _filesystem(self, name):
+    def _filesystem(self, node):
         ''' Private filesystem method for recursion '''
-        if (os.path.isfile(name)):
-            return self._file(name)
+        if (os.path.isfile(node.path)):
+            return self._file(node)
         
-        elif (os.path.isdir(name)):
-            return self._directory(name)
+        elif (os.path.isdir(node.path)):
+            return self._directory(node)
             
-    def _file(self, name):
-        ''' Return type of file '''
-        ext = fileExtension(name)
-        preHook = HooksPre().getAccurateType(name)
+    def _file(self, node):
+        ''' Return category of file '''
+        preHook = HooksPre().getAccurateCategory(node)
         if preHook[0]!='Unknown':
             return preHook
         else:
-            return self._extensionToType(ext)
+            return self._extensionToCategory(node.extension)
         
     
-    def _directory(self, name):
-        ''' Go recursively tough all files and return most recurrent file type '''
+    def _directory(self, node):
+        ''' Go recursively tough all files and return most recurrent file category '''
         collector = {}
-        for entry in os.listdir(name):
+        for entry in os.listdir(node.path):
             #print os.path.join(name,entry)
-            (fileType, score) = self._filesystem(os.path.join(name, entry))
-            if fileType in collector:
-                collector[fileType] += score
+            subNode = Node( os.path.join(node.path, entry) )
+            
+            (fileCategory, score) = self._filesystem( subNode )
+            if fileCategory in collector:
+                collector[fileCategory] += score
             else:
-                collector[fileType] = score
+                collector[fileCategory] = score
         return self._getBest(collector)
     
         
-    def paths(self, names):
-        ''' Return most recurrent type based on array of paths '''
+    def paths(self, nodes):
+        ''' Return most recurrent category based on array of paths '''
         collector = {}
-        for name in names:
-            ext = fileExtension(name)
-            if ext == '': continue # ignore extensionless files
-            fileType = self._extensionToType(ext)[0]
-            if fileType in collector:
-                collector[fileType] += 1
+        for node in nodes:
+            if node.extension == '': continue # ignore extensionless files
+            fileCategory = self._extensionToCategory(node.extension)[0]
+            if fileCategory in collector:
+                collector[fileCategory] += 1
             else:
-                collector[fileType] = 1
+                collector[fileCategory] = 1
         return self._getBest(collector)[0]
 
 
 class HooksPre():
-    ''' More accurate type detector methods. '''
+    ''' More accurate category detector methods. '''
     
-    def getAccurateType(self, name):
-        self.name = name
-        self.ext = fileExtension(name)
+    def getAccurateCategory(self, node):
+        self.node = node
         try:
-            return getattr(self, '_handle_%s' % self.ext)(self.name)
+            return getattr(self, '_handle_%s' % self.node.extension)()
         except AttributeError:
             return ('Unknown', 1)
     
     def _commonCompressedFile(self, filesInArchive):
-        ''' Detect type of files from archive '''
-        archiveType = Detector().paths(filesInArchive)
-        if archiveType == 'Unknown': 
+        ''' Detect category of files from archive '''
+        archiveCategory = Detector().paths([ Node(f, False) for f in filesInArchive ])
+        if archiveCategory == 'Unknown': 
             return ('Compressed', 1)
         else: 
-            return (archiveType, 1)
+            return (archiveCategory, 1)
         
-    def _handle_rar(self, name):
+    def _handle_rar(self):
         ''' Special handler for rar files '''
         if not ismodule(rarfile): return ('Compressed', 1)
         
-        archive = rarfile.RarFile(name)
+        archive = rarfile.RarFile(self.node.path)
         filesInArchive = [ f.filename for f in archive.infolist() ]
         return self._commonCompressedFile(filesInArchive)
         
-    def _handle_zip(self, name):
+    def _handle_zip(self):
         ''' Special handler for zip files '''
         if not ismodule(zipfile): return ('Compressed', 1)
         
-        archive = zipfile.ZipFile(name)
+        archive = zipfile.ZipFile(self.node.path)
         filesInArchive = [ f.filename for f in archive.infolist() ]
         return self._commonCompressedFile(filesInArchive)
         
-    def _handle_tar(self, name):
+    def _handle_tar(self):
         ''' Special handler for gz files '''
         if not ismodule(tarfile): return ('Compressed', 1)
-        
-        if not (name.endswith('tar') or name.endswith('tar.gz') or name.endswith('tar.bz2')):
+        path = self.node.path
+        if not (path.endswith('tar') or path.endswith('tar.gz') or path.endswith('tar.bz2')):
             return ('Compressed', 1)
         
-        archive = tarfile.open(name, 'r:*')
+        archive = tarfile.open(path, 'r:*')
         filesInArchive = archive.getnames()
         return self._commonCompressedFile(filesInArchive)
         
-    def _handle_bz2(self, name):
+    def _handle_bz2(self):
         ''' Special handler for tar.bz2 files '''
-        return self._handle_tar(name)
+        return self._handle_tar(self.node.path)
         
-    def _handle_gz(self, name):
+    def _handle_gz(self):
         ''' Special handler for gz files '''
-        return self._handle_tar(name)
+        return self._handle_tar(self.node.path)
     
 
 class HooksPost():
     ''' Execute actions on moved items '''
-    def __init__(self, name):
-        self.name = name
-        self.ext = fileExtension(name)
+    def __init__(self, node):
+        self.node = node
         try:
-            getattr(self, '_ext_%s' % self.ext)()
+            getattr(self, '_handle_%s' % self.node.extension)()
         except AttributeError:
             pass
         
-    def _ext_rar(self):
-        print '_ext_rar',self.name
+    def _handle_rar(self):
+        pass
+        #print '_handle_rar',self.node.path
 
     
-def fileExtension(path):
-    ''' Extract extension from path '''
-    return os.path.splitext(path)[1][1:].lower()
 
-def move(src, dst, attempt=0):
-    '''Move `src` to `dst`.
-    If `dst` already exists, script will add incrementally number to `dst`'''
-    if args.debug:
-        print src, ' -=> ', dst 
-    if args.simulate:
-        return
-    
-    if attempt > 1000 and args.debug:
-        print 'i tried 1000 times to move %s and failed' % src
-        return
-    
-    tmpdst = dst
-    if attempt > 0:
-        p1 = dst.rfind('.')
-        p2 = dst.rfind('/')
-        if p1 == -1 or p1 < p2:
-            tmpdst += ' ' + str(attempt)
-        else:
-            (a, b, c) = dst.rpartition('.')
-            b = ' ' + str(attempt) + '.'
-            tmpdst = a + b + c
-    
-    try:
-        if os.path.isfile(tmpdst):
-            raise OSError
-        os.rename(src, tmpdst)
-        
-    except OSError:
-        # TODO: what if dst is not writable? infinite loop?
-        move(src, dst, attempt + 1)
 
-def dropMess(name):
+def dropMess(rootPath):
     ''' Tidy given directory '''
-    # TODO: review usage of _revDiffs, newDiff 
     newDiff = {}
     try:
-        for entry in os.listdir(name):
-            if entry in Detector.types.keys():
+        for nodeName in os.listdir(rootPath):
+            if nodeName in Detector.categories.keys():
                 continue
-            path = os.path.join(name, entry)
-            newDiff[name] = os.stat(path).st_mtime
-            if newDiff[name] > time.time() - delay - 10:
+            node = Node( os.path.join(rootPath, nodeName) )
+            newDiff[rootPath] = os.stat(node.path).st_mtime
+            if newDiff[rootPath] > time.time() - delay - 10:
                 continue
             
             try:
-                ftype = Detector().filesystem(path)
+                node.getCategory()
             except OpenedNode:
                 if args.debug:
-                    print 'opened file(s) %s' % path
+                    print 'opened file(s) %s' % node.path
                 continue
             
-            targetDir = os.path.join(name, ftype) + os.sep
-            if not os.path.isdir(targetDir):
-                os.mkdir(targetDir)
+            targetPath = os.path.join(rootPath, node.category)
+            if not os.path.isdir(targetPath):
+                os.mkdir(targetPath)
 
-            target = os.path.join(targetDir, entry)
-            move(path, target, 0)
-            HooksPost(target)
+            node.move( os.path.join(targetPath, nodeName))
+            
+            HooksPost(node)
     except OSError as err:
         print err
         exit(1)
-    _prevDiffs[name] = newDiff
+    _prevDiffs[rootPath] = newDiff
     
 def main():
     try:
