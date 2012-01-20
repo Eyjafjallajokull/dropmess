@@ -38,4 +38,4 @@ Setup
 3. Start with `python dropmess.py`
 4. Learn more about command line arguments with `python dropmess.py -h`
 5. (Optional) To run script as daemon install [python-daemon](http://pypi.python.org/pypi/python-daemon)
-6. (Optional) Install python module [rarfile](http://pypi.python.org/pypi/rarfile/2.2) to detect type of RAR archive contents
+6. (Optional) Install python module [rarfile](http://pypi.python.org/pypi/rarfile/2.2) to support RAR files
