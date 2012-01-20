@@ -25,7 +25,10 @@ Features
 --------
 
 - categorize files (and folders) into subdirectories
-- look into compressed ZIP, RAR, TAR files and determine their contents type
+- look into compressed files and determine their contents type
+- extract compressed files
+
+* supported archives: ZIP, RAR, TAR, TAR.GZ, TAR.BZ2
     
 Setup
 -----

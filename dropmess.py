@@ -11,20 +11,27 @@ config = None
 watchDirs = []
 _prevDiffs = {}
 digArchives = None
+extractArchives = None
 delay = None
 rarfile = zipfile = tarfile = None
 
 class OpenedNode(Exception): pass
 
 class Node:
-    path = ''
+    path = '' 
+    dir = ''
+    fileName = '' 
+    fileBaseName = '' 
     extension = ''
+    
     isFilesystem = True
     category = None
     
     def __init__(self, path, isFilesystem = True):
         self.path = path
-        self.extension = os.path.splitext(self.path)[1][1:].lower()
+        (self.dir, self.fileName) = os.path.split(path)
+        (self.fileBaseName, self.extension) = os.path.splitext(self.fileName)
+        self.extension = self.extension[1:]
         self.isFilesystem = isFilesystem
     
     def getCategory(self):
@@ -62,12 +69,12 @@ class Node:
             if os.path.isfile(tmpdst):
                 raise OSError
             os.rename(self.path, tmpdst)
-            self.path = targetPath
+            self.__init__(targetPath)
             
         except OSError:
             # TODO: what if targetPath is not writable? infinite loop?
-            self.move(self.path, targetPath, attempt + 1)
-            self.path = targetPath
+            self.move(targetPath, attempt + 1)
+            self.__init__(targetPath)
         
 
 
@@ -212,45 +219,40 @@ class HooksPre():
     
     def _commonCompressedFile(self, filesInArchive):
         ''' Detect category of files from archive '''
+        if not digArchives: return ('Compressed', 1)
+        
         archiveCategory = Detector().paths([ Node(f, False) for f in filesInArchive ])
-        if archiveCategory == 'Unknown': 
+        if archiveCategory == 'Unknown':
             return ('Compressed', 1)
         else: 
             return (archiveCategory, 1)
         
     def _handle_rar(self):
-        ''' Special handler for rar files '''
         if not ismodule(rarfile): return ('Compressed', 1)
         
-        archive = rarfile.RarFile(self.node.path)
-        filesInArchive = [ f.filename for f in archive.infolist() ]
+        filesInArchive = [ f.filename for f in rarfile.RarFile(self.node.path).infolist() ]
         return self._commonCompressedFile(filesInArchive)
         
     def _handle_zip(self):
-        ''' Special handler for zip files '''
         if not ismodule(zipfile): return ('Compressed', 1)
         
-        archive = zipfile.ZipFile(self.node.path)
-        filesInArchive = [ f.filename for f in archive.infolist() ]
+        filesInArchive = [ f.filename for f in zipfile.ZipFile(self.node.path).infolist() ]
         return self._commonCompressedFile(filesInArchive)
         
     def _handle_tar(self):
-        ''' Special handler for gz files '''
         if not ismodule(tarfile): return ('Compressed', 1)
+        
         path = self.node.path
         if not (path.endswith('tar') or path.endswith('tar.gz') or path.endswith('tar.bz2')):
             return ('Compressed', 1)
         
-        archive = tarfile.open(path, 'r:*')
-        filesInArchive = archive.getnames()
+        filesInArchive = tarfile.open(path, 'r:*').getnames()
         return self._commonCompressedFile(filesInArchive)
         
     def _handle_bz2(self):
-        ''' Special handler for tar.bz2 files '''
         return self._handle_tar()
         
     def _handle_gz(self):
-        ''' Special handler for gz files '''
         return self._handle_tar()
     
 
@@ -262,12 +264,29 @@ class HooksPost():
             getattr(self, '_handle_%s' % self.node.extension)()
         except AttributeError:
             pass
+    
+    def _commonCompressedHandler(self, func):
+        if not extractArchives or args.simulate: return
+        
+        targetPath = os.path.join(self.node.dir, self.node.fileBaseName)
+        if not os.path.exists(targetPath):
+            if args.debug:
+                print 'extract ',self.node.path,'  -=>  ',targetPath
+            func(self.node.path, targetPath)
+            self.node.__init__(targetPath)
+        else:
+            if args.debug:
+                print 'cant extract, dir exists'
         
     def _handle_rar(self):
-        pass
-        #print '_handle_rar',self.node.path
-
-    
+        if not ismodule(rarfile): return
+        self._commonCompressedHandler( lambda src, dst: rarfile.RarFile(src).extractall(dst) )
+        
+    def _handle_zip(self):
+        if not ismodule(zipfile): return
+        self._commonCompressedHandler( lambda src, dst: zipfile.ZipFile(src).extractall(dst) )
+        
+    #TODO: tar gz bz2
 
 
 def dropMess(rootPath):
@@ -325,6 +344,7 @@ if __name__ == '__main__':
     config.readfp(file(os.path.expandvars(configFile)))
     delay = int(config.get('global', 'delay'))
     digArchives = int(config.get('global', 'digArchives')) == 1
+    extractArchives = int(config.get('global', 'extractArchives')) == 1
     
     # read directories to watch
     watchDirs = config.sections()
